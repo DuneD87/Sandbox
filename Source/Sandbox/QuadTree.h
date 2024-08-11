@@ -28,25 +28,73 @@ struct FQuadTreeNode
     void Subdivide();
 };
 
+UENUM(BlueprintType)
+enum class NoiseType : uint8
+{
+    Cellular = 0,
+    Perlin = 1,
+    Value = 2,
+    OpenSimplex2 = 3,
+    ValueCubic = 4,
+    OpenSimplex2S = 5
+};
+
+UENUM(BlueprintType)
+enum class NoiseFractalTypes : uint8
+{
+    None = 0,
+    FBm = 1,
+    Rigid = 2,
+    PingPong = 3,
+    DomainWarpProgressive = 4,
+    DomainWarpIndependent = 5
+};
 UCLASS()
 class SANDBOX_API UQuadTreeComponent : public UActorComponent
 {
     GENERATED_BODY()
 
 public:
+    
     UQuadTreeComponent();
-    bool IsInit = false;
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "NoiseType")
+    NoiseType NoiseType {NoiseType::Cellular};
+    
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "NoiseFractalType")
+    NoiseFractalTypes NoiseFractalType {NoiseFractalTypes::None};
+    
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "NoiseFrequency")
+    float NoiseFrequency {0.0001};
+    
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "CellularJitter")
+    float CellularJitter {1};
+    
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "FractalGain")
+    float FractalGain {0.5};
+    
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "FractalLacunarity")
+    float FractalLacunarity {2.0};
+
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "FractalWeightedStrength")
+    float FractalWeightedStrength {0};
+
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "FractalOctaves")
+    int FractalOctaves {3};
+    
+    UPROPERTY(EditAnywhere, Category = "Noise", DisplayName = "PingPongStrength")
+    float PingPongStrength {2.0};
+    
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
-    float Height {10000.0f};
+    float Height {5000.0f};
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
     int InitialDepth {4};
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
-    int MaxDepth {8};
+    int MaxDepth {7};
     UPROPERTY(VisibleAnywhere)
     class UProceduralMeshComponent* ProceduralMesh;
-
+    
     void InitializeQuadTree(const FVector2D& Origin, float InitialSize);
     void UpdateQuadTree(const FVector& CameraLocation, float SubdivisionThreshold);
     void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
@@ -60,4 +108,5 @@ private:
     void GenerateMeshRecursive(FQuadTreeNode& Node, TArray<FVector>& OutVertices, TArray<int32>& OutIndices, TMap<FVector, int32>& VertexMap);
     void AddVertex(const FVector& Vertex, TArray<FVector>& OutVertices, TMap<FVector, int32>& VertexMap, int32& OutVertexIndex);
     FastNoiseLite* NoiseFunc;
+    float DefaultSize;
 };

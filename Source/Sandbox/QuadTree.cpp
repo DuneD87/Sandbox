@@ -6,19 +6,21 @@ UQuadTreeComponent::UQuadTreeComponent()
 
 void UQuadTreeComponent::InitializeQuadTree(const FVector2D& Origin, float InitialSize)
 {
-    NoiseFunc = new FastNoiseLite;
-    NoiseFunc->SetSeed(1337);
-    NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_Cellular); // Tipo de ruido
-    NoiseFunc->SetFrequency(0.0001); // Frecuencia del ruido
+    if (NoiseFunc == nullptr)
+    {
+        NoiseFunc = new FastNoiseLite;
+        NoiseFunc->SetSeed(1337);
+        NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_Cellular); // Tipo de ruido
+        NoiseFunc->SetFrequency(0.0001); // Frecuencia del ruid
+    }
     
     RootNode = FQuadTreeNode(Origin, InitialSize, InitialSize);
-
+    this->DefaultSize = InitialSize;
     // Inicializar el QuadTree con un Depth de 3
   
     InitializeNodeRecursive(RootNode);
 
     GenerateMesh(RootNode);  // Generar la malla después de la subdivisión inicial
-    IsInit = true;
 }
 
 void UQuadTreeComponent::InitializeNodeRecursive(FQuadTreeNode& Node)
@@ -45,22 +47,64 @@ void UQuadTreeComponent::UpdateQuadTree(const FVector& CameraLocation, float Sub
 void UQuadTreeComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
-    // Nombre de la propiedad que cambió
-    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-
-    // Si alguna propiedad relevante cambió, reconstruir el QuadTree
-    if (PropertyName == GET_MEMBER_NAME_CHECKED(UQuadTreeComponent, InitialDepth) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(UQuadTreeComponent, Height) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(UQuadTreeComponent, MaxDepth))
+   
+    switch (NoiseType)
     {
-        // Limpiar el árbol actual
-        RootNode.Children.Empty();
-        RootNode.Size = 10000;
-        RootNode.Depth = 0;
-
-        // Inicializar de nuevo el QuadTree
-        InitializeQuadTree(FVector2D::ZeroVector, 10000);
+        case NoiseType::Cellular:
+            NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_Cellular);
+            break;
+        case NoiseType::Perlin:
+            NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+            break;
+        case NoiseType::Value:
+            NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_Value);
+            break;
+        case NoiseType::OpenSimplex2:
+            NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
+            break;
+        case NoiseType::ValueCubic:
+            NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_ValueCubic);
+            break;
+        case NoiseType::OpenSimplex2S:
+            NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2S);
+            break;
     }
+    
+    switch (NoiseFractalType)
+    {
+        case NoiseFractalTypes::None:
+            NoiseFunc->SetFractalType(FastNoiseLite::FractalType_None);
+            break;
+        case NoiseFractalTypes::FBm:
+            NoiseFunc->SetFractalType(FastNoiseLite::FractalType_FBm);
+            break;
+        case NoiseFractalTypes::Rigid:
+            NoiseFunc->SetFractalType(FastNoiseLite::FractalType_Ridged);
+            break;
+        case NoiseFractalTypes::PingPong:
+            NoiseFunc->SetFractalType(FastNoiseLite::FractalType_PingPong);
+            break;
+        case NoiseFractalTypes::DomainWarpProgressive:
+            NoiseFunc->SetFractalType(FastNoiseLite::FractalType_DomainWarpProgressive);
+            break;
+        case NoiseFractalTypes::DomainWarpIndependent:
+            NoiseFunc->SetFractalType(FastNoiseLite::FractalType_DomainWarpIndependent);
+            break;
+    }
+    
+    NoiseFunc->SetFrequency(NoiseFrequency);
+    NoiseFunc->SetCellularJitter(CellularJitter);
+    NoiseFunc->SetFractalGain(FractalGain);
+    NoiseFunc->SetFractalLacunarity(FractalLacunarity);
+    NoiseFunc->SetFractalWeightedStrength(FractalWeightedStrength);
+    NoiseFunc->SetFractalOctaves(FractalOctaves);
+    NoiseFunc->SetFractalPingPongStrength(PingPongStrength);
+
+    RootNode.Children.Empty();
+    RootNode.Size = DefaultSize;
+    RootNode.Depth = 0;
+
+    InitializeQuadTree(FVector2D::ZeroVector, DefaultSize);
 }
 
 
@@ -132,7 +176,7 @@ void UQuadTreeComponent::GenerateMesh(FQuadTreeNode& Node)
 {
     TArray<FVector> AccumulatedVertices;
     TArray<int32> AccumulatedIndices;
-    TMap<FVector, int32> VertexMap; // Declara el mapa de vértices
+    TMap<FVector, int32> VertexMap;
 
     GenerateMeshRecursive(Node, AccumulatedVertices, AccumulatedIndices, VertexMap);
 
@@ -165,13 +209,11 @@ void UQuadTreeComponent::GenerateMeshRecursive(FQuadTreeNode& Node, TArray<FVect
         FVector TopLeft = FVector(Node.Position + FVector2D(0.0f, Node.Size), 0.0f);
         FVector TopRight = FVector(Node.Position + FVector2D(Node.Size, Node.Size), 0.0f);
 
-        // Generar valores de Z usando el ruido
         BottomLeft.Z = NoiseFunc->GetNoise(BottomLeft.X, BottomLeft.Y) * Height; 
         BottomRight.Z = NoiseFunc->GetNoise(BottomRight.X, BottomRight.Y) * Height;
         TopLeft.Z = NoiseFunc->GetNoise(TopLeft.X, TopLeft.Y) * Height;
         TopRight.Z = NoiseFunc->GetNoise(TopRight.X, TopRight.Y) * Height;
-
-        // Añadir vértices
+        
         AddVertex(BottomLeft, OutVertices, VertexMap, VertexIndex);
         int32 BottomLeftIndex = VertexIndex;
 
@@ -183,8 +225,7 @@ void UQuadTreeComponent::GenerateMeshRecursive(FQuadTreeNode& Node, TArray<FVect
 
         AddVertex(TopRight, OutVertices, VertexMap, VertexIndex);
         int32 TopRightIndex = VertexIndex;
-
-        // Añadir índices para los triángulos
+        
         OutIndices.Add(BottomLeftIndex);
         OutIndices.Add(TopLeftIndex);
         OutIndices.Add(BottomRightIndex);
