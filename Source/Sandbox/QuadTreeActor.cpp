@@ -11,7 +11,7 @@ AQuadTreeActor::AQuadTreeActor()
 	
 	QuadTreeComponent = CreateDefaultSubobject<UQuadTreeComponent>(TEXT("QuadTreeComponent"));
 	RootComponent = QuadTreeComponent->ProceduralMesh;
-	SubdivisionThreshold = 50000.0f;
+	SubdivisionThreshold = 10000.0f;
 }
 
 void AQuadTreeActor::BeginPlay()

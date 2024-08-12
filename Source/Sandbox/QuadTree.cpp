@@ -42,6 +42,7 @@ void UQuadTreeComponent::UpdateQuadTree(const FVector& CameraLocation, float Sub
 {
     SubdivideNode(RootNode, CameraLocation, SubdivisionThreshold);
     GenerateMesh(RootNode); 
+    
 }
 
 void UQuadTreeComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
@@ -123,20 +124,44 @@ void UQuadTreeComponent::SubdivideNode(FQuadTreeNode& Node, const FVector& Camer
     FVector ActorLocation = GetOwner()->GetActorLocation();
     FVector2D NodeCenter = FVector2D(ActorLocation.X, ActorLocation.Y) + Node.Position + FVector2D(Node.Size / 2.0f, Node.Size / 2.0f);
     float DistanceToCamera = FVector2D::Distance(NodeCenter, FVector2D(CameraLocation.X, CameraLocation.Y));
-    
-    if (DistanceToCamera < SubdivisionThreshold && Node.Size > 50.0f)
+
+    // Determine desired depth based on distance
+    int DesiredDepth = MaxDepth;
+    if (DistanceToCamera > SubdivisionThreshold * 5)
     {
-        if (Node.Children.Num() == 0 && Node.Depth < MaxDepth)
+        DesiredDepth = InitialDepth;
+    }
+    else if (DistanceToCamera > SubdivisionThreshold * 4)
+    {
+        DesiredDepth = FMath::Clamp(InitialDepth + 1, InitialDepth, MaxDepth);
+    }
+    else if (DistanceToCamera > SubdivisionThreshold * 3)
+    {
+        DesiredDepth = FMath::Clamp(InitialDepth + 2, InitialDepth, MaxDepth);
+    }
+    else if (DistanceToCamera > SubdivisionThreshold * 2)
+    {
+        DesiredDepth = FMath::Clamp(InitialDepth + 3, InitialDepth, MaxDepth);
+    }
+    else if (DistanceToCamera > SubdivisionThreshold)
+    {
+        DesiredDepth = FMath::Clamp(InitialDepth + 4, InitialDepth, MaxDepth);
+    }
+
+    // Subdivide if necessary
+    if (Node.Depth < DesiredDepth && Node.Size > 50.0f)
+    {
+        if (Node.Children.Num() == 0)
         {
             Node.Subdivide();
-           
+
             for (FQuadTreeNode& Child : Node.Children)
             {
                 Child.Depth = Node.Depth + 1;
                 Child.InitialSize = Node.InitialSize;
             }
         }
-        
+
         for (FQuadTreeNode& Child : Node.Children)
         {
             SubdivideNode(Child, CameraLocation, SubdivisionThreshold);
@@ -144,13 +169,14 @@ void UQuadTreeComponent::SubdivideNode(FQuadTreeNode& Node, const FVector& Camer
     }
     else
     {
+        // Collapse node if it has children but should be at a lower detail
         if (Node.Children.Num() > 0)
         {
             bool ShouldCollapse = true;
-            
+
             for (FQuadTreeNode& Child : Node.Children)
             {
-                if (Child.Depth < InitialDepth || FVector2D::Distance(FVector2D(CameraLocation.X, CameraLocation.Y), Child.Position) < SubdivisionThreshold)
+                if (FVector2D::Distance(FVector2D(CameraLocation.X, CameraLocation.Y), Child.Position) < SubdivisionThreshold)
                 {
                     ShouldCollapse = false;
                     break;
@@ -177,10 +203,12 @@ void UQuadTreeComponent::GenerateMesh(FQuadTreeNode& Node)
     TArray<FVector> AccumulatedVertices;
     TArray<int32> AccumulatedIndices;
     TMap<FVector, int32> VertexMap;
-
+    
     GenerateMeshRecursive(Node, AccumulatedVertices, AccumulatedIndices, VertexMap);
-
+    
+    ProceduralMesh->bUseAsyncCooking = true;
     ProceduralMesh->CreateMeshSection(0, AccumulatedVertices, AccumulatedIndices, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+
 }
 
 void UQuadTreeComponent::AddVertex(const FVector& Vertex, TArray<FVector>& OutVertices, TMap<FVector, int32>& VertexMap, int32& OutVertexIndex)

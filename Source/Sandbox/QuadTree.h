@@ -88,10 +88,10 @@ public:
     float Height {5000.0f};
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
-    int InitialDepth {4};
+    int InitialDepth {3};
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
-    int MaxDepth {7};
+    int MaxDepth {8};
     UPROPERTY(VisibleAnywhere)
     class UProceduralMeshComponent* ProceduralMesh;
     
