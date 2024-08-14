@@ -17,15 +17,27 @@ struct FQuadTreeNode
     float InitialSize;
     int32 Depth;
     TArray<FQuadTreeNode> Children;
+    bool bNeedsUpdate;
+    
     FQuadTreeNode()
-           : Position(FVector2D(0.0f, 0.0f)), Size(0.0f), InitialSize(0.0f), Depth(0)
-    {}
+        : Position(FVector2D(0.0f, 0.0f)), Size(0.0f), InitialSize(0.0f), Depth(0), bNeedsUpdate(true)
+    {
+    }
 
-    FQuadTreeNode(FVector2D InPosition, float InSize, float initialSize)
-        : Position(InPosition), Size(InSize), InitialSize(initialSize), Depth(0) 
-    {}
+    FQuadTreeNode(FVector2D InPosition, float InSize, float InInitialSize)
+        : Position(InPosition), Size(InSize), InitialSize(InInitialSize), Depth(0), bNeedsUpdate(true)
+    {
+    }
 
     void Subdivide();
+};
+
+USTRUCT()
+struct FGeometryData
+{
+    GENERATED_BODY()
+    TArray<FVector> Vertices;
+    TArray<int32> Triangles;
 };
 
 UENUM(BlueprintType)
@@ -92,6 +104,13 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
     int MaxDepth {8};
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
+    UMaterialInstance *Material;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="QuadTreeComponent")
+    bool PauseSubdivision {false};
+    
     UPROPERTY(VisibleAnywhere)
     class UProceduralMeshComponent* ProceduralMesh;
     
@@ -107,6 +126,9 @@ private:
     void GenerateMesh(FQuadTreeNode& Node);
     void GenerateMeshRecursive(FQuadTreeNode& Node, TArray<FVector>& OutVertices, TArray<int32>& OutIndices, TMap<FVector, int32>& VertexMap);
     void AddVertex(const FVector& Vertex, TArray<FVector>& OutVertices, TMap<FVector, int32>& VertexMap, int32& OutVertexIndex);
+    
     FastNoiseLite* NoiseFunc;
     float DefaultSize;
+
+    mutable FWindowsRWLock DataGuard;
 };

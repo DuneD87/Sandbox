@@ -6,6 +6,8 @@ UQuadTreeComponent::UQuadTreeComponent()
 
 void UQuadTreeComponent::InitializeQuadTree(const FVector2D& Origin, float InitialSize)
 {
+    if (PauseSubdivision) return;
+
     if (NoiseFunc == nullptr)
     {
         NoiseFunc = new FastNoiseLite;
@@ -13,7 +15,8 @@ void UQuadTreeComponent::InitializeQuadTree(const FVector2D& Origin, float Initi
         NoiseFunc->SetNoiseType(FastNoiseLite::NoiseType_Cellular); // Tipo de ruido
         NoiseFunc->SetFrequency(0.0001); // Frecuencia del ruid
     }
-    
+    ProceduralMesh->SetMaterial(0, Material);
+    ProceduralMesh->bUseAsyncCooking = true;
     RootNode = FQuadTreeNode(Origin, InitialSize, InitialSize);
     this->DefaultSize = InitialSize;
     // Inicializar el QuadTree con un Depth de 3
@@ -40,15 +43,16 @@ void UQuadTreeComponent::InitializeNodeRecursive(FQuadTreeNode& Node)
 
 void UQuadTreeComponent::UpdateQuadTree(const FVector& CameraLocation, float SubdivisionThreshold)
 {
-    SubdivideNode(RootNode, CameraLocation, SubdivisionThreshold);
-    GenerateMesh(RootNode); 
-    
+    if (!PauseSubdivision)
+    {
+        SubdivideNode(RootNode, CameraLocation, SubdivisionThreshold);
+        GenerateMesh(RootNode); 
+    }
 }
 
 void UQuadTreeComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
-   
     switch (NoiseType)
     {
         case NoiseType::Cellular:
@@ -104,7 +108,8 @@ void UQuadTreeComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyC
     RootNode.Children.Empty();
     RootNode.Size = DefaultSize;
     RootNode.Depth = 0;
-
+    ProceduralMesh->SetMaterial(0, Material);
+    
     InitializeQuadTree(FVector2D::ZeroVector, DefaultSize);
 }
 
@@ -200,15 +205,38 @@ void UQuadTreeComponent::SubdivideNode(FQuadTreeNode& Node, const FVector& Camer
 
 void UQuadTreeComponent::GenerateMesh(FQuadTreeNode& Node)
 {
-    TArray<FVector> AccumulatedVertices;
-    TArray<int32> AccumulatedIndices;
-    TMap<FVector, int32> VertexMap;
-    
-    GenerateMeshRecursive(Node, AccumulatedVertices, AccumulatedIndices, VertexMap);
-    
-    ProceduralMesh->bUseAsyncCooking = true;
-    ProceduralMesh->CreateMeshSection(0, AccumulatedVertices, AccumulatedIndices, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
 
+    TFuture<FGeometryData> FutureData = Async(EAsyncExecution::LargeThreadPool,[&]
+    {
+        TArray<FVector> AccumulatedVertices;
+        TArray<int32> AccumulatedIndices;
+        TMap<FVector, int32> VertexMap;
+        
+        GenerateMeshRecursive(Node, AccumulatedVertices, AccumulatedIndices, VertexMap);
+        FGeometryData VertexData;
+        VertexData.Vertices = AccumulatedVertices;
+        VertexData.Triangles = AccumulatedIndices;
+
+        return VertexData;
+        
+    });
+    
+    FutureData.Next([this](FGeometryData VertexData)
+    {
+        AsyncTask(ENamedThreads::GameThread, [this, VertexData]()
+        {
+            ProceduralMesh->CreateMeshSection(
+                0,
+                VertexData.Vertices,
+                VertexData.Triangles,
+                TArray<FVector>(),       
+                TArray<FVector2D>(),    
+                TArray<FColor>(),       
+                TArray<FProcMeshTangent>(), 
+                true                    
+            );
+        });
+    });
 }
 
 void UQuadTreeComponent::AddVertex(const FVector& Vertex, TArray<FVector>& OutVertices, TMap<FVector, int32>& VertexMap, int32& OutVertexIndex)
@@ -228,10 +256,10 @@ void UQuadTreeComponent::AddVertex(const FVector& Vertex, TArray<FVector>& OutVe
 
 void UQuadTreeComponent::GenerateMeshRecursive(FQuadTreeNode& Node, TArray<FVector>& OutVertices, TArray<int32>& OutIndices, TMap<FVector, int32>& VertexMap)
 {
+    
     if (Node.Children.Num() == 0)
     {
         int32 VertexIndex;
-
         FVector BottomLeft = FVector(Node.Position, 0.0f);
         FVector BottomRight = FVector(Node.Position + FVector2D(Node.Size, 0.0f), 0.0f);
         FVector TopLeft = FVector(Node.Position + FVector2D(0.0f, Node.Size), 0.0f);
